@@ -1,0 +1,868 @@
+<!DOCTYPE html>
+<html lang="ko">
+	<head>
+		<meta charset="UTF-8" />
+		<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+		<title>Robot MQTT Frontend</title>
+		<script src="https://unpkg.com/mqtt/dist/mqtt.min.js"></script>
+		<style>
+			:root {
+				--bg: #f5f7fb;
+				--card: #ffffff;
+				--border: #e5e7eb;
+				--text: #111827;
+				--muted: #6b7280;
+				--primary: #2563eb;
+				--primary-600: #1d4ed8;
+				--danger: #dc2626;
+				--success: #059669;
+			}
+			body {
+				font-family: system-ui, -apple-system, Segoe UI, Roboto, Helvetica, Arial, sans-serif;
+				margin: 0;
+				background: var(--bg);
+				color: var(--text);
+			}
+			*,
+			*::before,
+			*::after {
+				box-sizing: border-box;
+			}
+			.container {
+				max-width: clamp(1200px, 98vw, 1800px);
+				width: 100%;
+				margin: 0 auto;
+				padding: 16px;
+			}
+			.header {
+				display: flex;
+				align-items: center;
+				justify-content: space-between;
+				padding: 16px 0 8px;
+			}
+			h1 {
+				font-size: 22px;
+				margin: 0;
+			}
+			.status-pill {
+				display: inline-flex;
+				align-items: center;
+				gap: 8px;
+				padding: 6px 10px;
+				border-radius: 999px;
+				font-size: 12px;
+				border: 1px solid var(--border);
+				background: #fff;
+				color: var(--muted);
+			}
+			.status-pill.connected {
+				border-color: #a7f3d0;
+				background: #ecfdf5;
+				color: var(--success);
+			}
+			.status-pill.disconnected {
+				border-color: #fecaca;
+				background: #fef2f2;
+				color: var(--danger);
+			}
+			.row {
+				margin: 10px 0;
+			}
+			button {
+				margin-right: 8px;
+			}
+			.btn {
+				display: inline-flex;
+				align-items: center;
+				gap: 6px;
+				padding: 8px 12px;
+				border-radius: 8px;
+				border: 1px solid var(--border);
+				background: #fff;
+				color: var(--text);
+				cursor: pointer;
+			}
+			.btn:hover {
+				background: #f9fafb;
+			}
+			.btn-primary {
+				background: var(--primary);
+				border-color: var(--primary);
+				color: #fff;
+			}
+			.btn-primary:hover {
+				background: var(--primary-600);
+				border-color: var(--primary-600);
+			}
+			.btn-danger {
+				background: var(--danger);
+				border-color: var(--danger);
+				color: #fff;
+			}
+			.btn-ghost {
+				background: transparent;
+				border-color: transparent;
+				color: var(--muted);
+			}
+			.btn-ghost:hover {
+				background: #f3f4f6;
+				border-color: #f3f4f6;
+				color: var(--text);
+			}
+			input[type="text"],
+			input[type="number"] {
+				padding: 8px 10px;
+				border-radius: 8px;
+				border: 1px solid var(--border);
+				background: #fff;
+			}
+			#status {
+				font-weight: 600;
+			}
+			.card {
+				background: var(--card);
+				border: 1px solid var(--border);
+				border-radius: 12px;
+				box-shadow: 0 2px 10px rgba(0, 0, 0, 0.04);
+				padding: 16px;
+			}
+			.card-title {
+				font-weight: 600;
+				margin: 0 0 8px;
+				color: var(--text);
+			}
+			#mainSplit {
+				display: grid;
+				grid-template-columns: 1.85fr 1fr;
+				gap: 12px;
+				align-items: start;
+			}
+			.robot-panels {
+				display: grid;
+				grid-template-columns: repeat(2, minmax(260px, 1fr));
+				gap: 20px;
+				align-items: start;
+			}
+			.robot-card {
+				min-width: 0;
+			}
+			#logSendWrap {
+				margin-bottom: 12px;
+			}
+			#logRow {
+				display: grid;
+				/* 3 columns, wrap to next row -> 3x2 layout for 5 cards */
+				grid-template-columns: repeat(3, minmax(380px, 1fr));
+				gap: 12px;
+				align-items: start;
+			}
+			#logLRWrap {
+				display: contents;
+			}
+			.logHeader {
+				display: flex;
+				align-items: center;
+				justify-content: space-between;
+				font-weight: 600;
+				margin-bottom: 6px;
+				color: #444;
+			}
+			.logBox {
+				width: 100%;
+				height: clamp(320px, 38vh, 560px);
+				border: 1px solid #ccc;
+				padding: 8px;
+				overflow: auto;
+				white-space: pre-wrap;
+				word-break: break-word;
+				font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", "Courier New", monospace;
+				font-size: 12px;
+				background: #fafafa;
+			}
+			#logSend.logBox {
+				height: clamp(320px, 38vh, 560px);
+			}
+			.pill {
+				display: inline-block;
+				padding: 2px 8px;
+				border-radius: 999px;
+				font-size: 12px;
+				margin-left: 6px;
+			}
+			.ok {
+				background: #e6ffed;
+				color: #096d1c;
+				border: 1px solid #b7eb8f;
+			}
+			.err {
+				background: #fff2f0;
+				color: #a8071a;
+				border: 1px solid #ffa39e;
+			}
+			.send {
+				background: #fff2f0;
+				color: #a8071a;
+				border: 1px solid #ffa39e;
+			}
+			.recv {
+				background: #f6ffed;
+				color: #237804;
+				border: 1px solid #b7eb8f;
+			}
+			.ack {
+				background: #e6f7ff;
+				color: #0050b3;
+				border: 1px solid #91d5ff;
+			}
+			.progress {
+				background: #fff7e6;
+				color: #874d00;
+				border: 1px solid #ffd591;
+			}
+			.result {
+				background: #f9f0ff;
+				color: #531dab;
+				border: 1px solid #d3adf7;
+			}
+			.config {
+				display: grid;
+				grid-template-columns: 140px 1fr;
+				gap: 8px;
+				align-items: center;
+				max-width: 720px;
+			}
+			.label {
+				color: #555;
+			}
+			input[type="range"] {
+				width: 100%;
+			}
+			.slider-grid {
+				display: grid;
+				grid-template-columns: repeat(auto-fit, minmax(260px, 1fr));
+				gap: 8px 16px;
+			}
+			.slider {
+				display: grid;
+				grid-template-columns: 36px 1fr 48px;
+				align-items: center;
+				gap: 8px;
+			}
+			/* Keep two-column layout on most screens; only stack on very small widths */
+			@media (max-width: 900px) {
+				#mainSplit {
+					grid-template-columns: 1fr;
+				}
+				#logSendWrap {
+					margin-top: 12px;
+				}
+			}
+			@media (max-width: 720px) {
+				.container {
+					padding: 16px;
+				}
+				.slider-grid {
+					grid-template-columns: 1fr;
+				}
+			}
+		</style>
+	</head>
+	<body>
+		<div class="container">
+			<div class="header">
+				<h1>Robot MQTT Frontend <small style="font-size: 12px; color: var(--muted)">(Separated Topics)</small></h1>
+				<span id="status" class="status-pill disconnected">disconnected</span>
+			</div>
+
+			<div id="mainSplit">
+				<div id="controlCol">
+					<div class="row config card">
+						<div class="label">Broker WS URL</div>
+						<input type="text" id="brokerUrl" value="wss://buriburi.monster:9001" />
+						<div class="label">Base Topic</div>
+						<input type="text" id="baseTopic" value="buriburi" />
+						<div class="label">Client ID</div>
+						<input type="text" id="clientId" value="backend-web" />
+						<div class="label">Username</div>
+						<input type="text" id="brokerUser" value="" placeholder="optional" />
+						<div class="label">Password</div>
+						<input type="password" id="brokerPass" value="" placeholder="optional" />
+					</div>
+
+					<div class="row">
+						<button id="btnConnect" class="btn btn-primary">Connect</button>
+						<button id="btnDisconnect" class="btn">Disconnect</button>
+						<span class="pill" id="role">backend</span>
+						<span class="pill" title="topics">cmd(all)/cmd(robot)/joint/event</span>
+					</div>
+
+					<div class="row card" style="margin-top: 12px">
+						<div style="display: flex; gap: 12px; align-items: center; flex-wrap: wrap">
+							<strong class="card-title">Commands (broadcast to both)</strong>
+							<button id="cmdStartTrack" class="btn">Start Tracking</button>
+							<button id="cmdStopTrack" class="btn">Stop Tracking</button>
+							<button id="cmdInit" class="btn">Init Pose</button>
+							<button id="cmdHeart" class="btn">Make Heart</button>
+							<button id="cmdHug" class="btn">Make Hug</button>
+							<button id="cmdHello" class="btn">안녕?</button>
+							<button id="cmdScissors" class="btn">가위</button>
+							<button id="cmdRock" class="btn">바위</button>
+							<button id="cmdPaper" class="btn">보</button>
+							<button id="cmdGoodMorning" class="btn">굿모닝</button>
+							<button id="cmdGoodNight" class="btn">굿나잇</button>
+							<button id="cmdHungry" class="btn">배고파</button>
+							<button id="cmdAteAll" class="btn">다먹었어!</button>
+							<span style="width: 1px; height: 20px; background: #ddd"></span>
+							<button id="cmdStartFollow" class="btn">Start Follow</button>
+							<button id="cmdEndFollow" class="btn">End Follow</button>
+						</div>
+					</div>
+
+					<div class="row robot-panels" style="margin-top: 12px">
+						<div id="panelLeft" class="card robot-card">
+							<h3>Left Robot <span class="pill">robot_left</span></h3>
+							<h4>Live Joint Angles</h4>
+							<div class="row">
+								<span>S1: <strong id="l_a1">-</strong></span>
+								<span style="margin-left: 10px">S2: <strong id="l_a2">-</strong></span>
+								<span style="margin-left: 10px">S3: <strong id="l_a3">-</strong></span>
+								<span style="margin-left: 10px">S4: <strong id="l_a4">-</strong></span>
+								<span style="margin-left: 10px">S5: <strong id="l_a5">-</strong></span>
+								<span style="margin-left: 10px">S6: <strong id="l_a6">-</strong></span>
+							</div>
+							<h4 style="margin-top: 12px">Sliders (live)</h4>
+							<div class="slider-grid">
+								<div class="slider">
+									<div>S1</div>
+									<input type="range" id="l_s1" min="0" max="180" step="1" />
+									<div><span id="l_sv1">-</span>°</div>
+								</div>
+								<div class="slider">
+									<div>S2</div>
+									<input type="range" id="l_s2" min="0" max="180" step="1" />
+									<div><span id="l_sv2">-</span>°</div>
+								</div>
+								<div class="slider">
+									<div>S3</div>
+									<input type="range" id="l_s3" min="0" max="180" step="1" />
+									<div><span id="l_sv3">-</span>°</div>
+								</div>
+								<div class="slider">
+									<div>S4</div>
+									<input type="range" id="l_s4" min="0" max="180" step="1" />
+									<div><span id="l_sv4">-</span>°</div>
+								</div>
+								<div class="slider">
+									<div>S5</div>
+									<input type="range" id="l_s5" min="0" max="180" step="1" />
+									<div><span id="l_sv5">-</span>°</div>
+								</div>
+								<div class="slider">
+									<div>S6</div>
+									<input type="range" id="l_s6" min="0" max="180" step="1" />
+									<div><span id="l_sv6">-</span>°</div>
+								</div>
+							</div>
+							<div class="row" style="margin-top: 8px">
+								<label class="label" for="l_set_joint_ms">set_joint time_ms</label>
+								<input type="number" id="l_set_joint_ms" min="0" max="5000" value="1000" style="width: 100px; margin-left: 8px" />
+							</div>
+							<h4>Manual Control</h4>
+							<div class="row">
+								<div>
+									<button onclick="nudgeLeft(1,-5)">S1 -5</button>
+									<input type="number" id="l_i1" min="0" max="180" value="90" />
+									<button onclick="nudgeLeft(1,5)">S1 +5</button>
+								</div>
+								<div>
+									<button onclick="nudgeLeft(2,-5)">S2 -5</button>
+									<input type="number" id="l_i2" min="0" max="180" value="150" />
+									<button onclick="nudgeLeft(2,5)">S2 +5</button>
+								</div>
+								<div>
+									<button onclick="nudgeLeft(3,-5)">S3 -5</button>
+									<input type="number" id="l_i3" min="0" max="180" value="20" />
+									<button onclick="nudgeLeft(3,5)">S3 +5</button>
+								</div>
+								<div>
+									<button onclick="nudgeLeft(4,-5)">S4 -5</button>
+									<input type="number" id="l_i4" min="0" max="180" value="20" />
+									<button onclick="nudgeLeft(4,5)">S4 +5</button>
+								</div>
+								<div>
+									<button onclick="nudgeLeft(5,-5)">S5 -5</button>
+									<input type="number" id="l_i5" min="0" max="180" value="90" />
+									<button onclick="nudgeLeft(5,5)">S5 +5</button>
+								</div>
+								<div>
+									<button onclick="nudgeLeft(6,-5)">S6 -5</button>
+									<input type="number" id="l_i6" min="0" max="180" value="30" />
+									<button onclick="nudgeLeft(6,5)">S6 +5</button>
+								</div>
+								<div style="margin-top: 8px; display: flex; align-items: center; gap: 8px; flex-wrap: wrap">
+									<button onclick="applyAnglesLeft()">Apply All</button>
+									<label class="label" for="l_set_joints_ms">time_ms</label>
+									<input type="number" id="l_set_joints_ms" min="0" max="10000" value="1000" style="width: 100px" />
+								</div>
+							</div>
+						</div>
+
+						<div id="panelRight" class="card robot-card">
+							<h3>Right Robot <span class="pill">robot_right</span></h3>
+							<h4>Live Joint Angles</h4>
+							<div class="row">
+								<span>S1: <strong id="r_a1">-</strong></span>
+								<span style="margin-left: 10px">S2: <strong id="r_a2">-</strong></span>
+								<span style="margin-left: 10px">S3: <strong id="r_a3">-</strong></span>
+								<span style="margin-left: 10px">S4: <strong id="r_a4">-</strong></span>
+								<span style="margin-left: 10px">S5: <strong id="r_a5">-</strong></span>
+								<span style="margin-left: 10px">S6: <strong id="r_a6">-</strong></span>
+							</div>
+							<h4 style="margin-top: 12px">Sliders (live)</h4>
+							<div class="slider-grid">
+								<div class="slider">
+									<div>S1</div>
+									<input type="range" id="r_s1" min="0" max="180" step="1" />
+									<div><span id="r_sv1">-</span>°</div>
+								</div>
+								<div class="slider">
+									<div>S2</div>
+									<input type="range" id="r_s2" min="0" max="180" step="1" />
+									<div><span id="r_sv2">-</span>°</div>
+								</div>
+								<div class="slider">
+									<div>S3</div>
+									<input type="range" id="r_s3" min="0" max="180" step="1" />
+									<div><span id="r_sv3">-</span>°</div>
+								</div>
+								<div class="slider">
+									<div>S4</div>
+									<input type="range" id="r_s4" min="0" max="180" step="1" />
+									<div><span id="r_sv4">-</span>°</div>
+								</div>
+								<div class="slider">
+									<div>S5</div>
+									<input type="range" id="r_s5" min="0" max="180" step="1" />
+									<div><span id="r_sv5">-</span>°</div>
+								</div>
+								<div class="slider">
+									<div>S6</div>
+									<input type="range" id="r_s6" min="0" max="180" step="1" />
+									<div><span id="r_sv6">-</span>°</div>
+								</div>
+							</div>
+							<div class="row" style="margin-top: 8px">
+								<label class="label" for="r_set_joint_ms">set_joint time_ms</label>
+								<input type="number" id="r_set_joint_ms" min="0" max="5000" value="1000" style="width: 100px; margin-left: 8px" />
+							</div>
+							<h4>Manual Control</h4>
+							<div class="row">
+								<div>
+									<button onclick="nudgeRight(1,-5)">S1 -5</button>
+									<input type="number" id="r_i1" min="0" max="180" value="90" />
+									<button onclick="nudgeRight(1,5)">S1 +5</button>
+								</div>
+								<div>
+									<button onclick="nudgeRight(2,-5)">S2 -5</button>
+									<input type="number" id="r_i2" min="0" max="180" value="150" />
+									<button onclick="nudgeRight(2,5)">S2 +5</button>
+								</div>
+								<div>
+									<button onclick="nudgeRight(3,-5)">S3 -5</button>
+									<input type="number" id="r_i3" min="0" max="180" value="20" />
+									<button onclick="nudgeRight(3,5)">S3 +5</button>
+								</div>
+								<div>
+									<button onclick="nudgeRight(4,-5)">S4 -5</button>
+									<input type="number" id="r_i4" min="0" max="180" value="20" />
+									<button onclick="nudgeRight(4,5)">S4 +5</button>
+								</div>
+								<div>
+									<button onclick="nudgeRight(5,-5)">S5 -5</button>
+									<input type="number" id="r_i5" min="0" max="180" value="90" />
+									<button onclick="nudgeRight(5,5)">S5 +5</button>
+								</div>
+								<div>
+									<button onclick="nudgeRight(6,-5)">S6 -5</button>
+									<input type="number" id="r_i6" min="0" max="180" value="30" />
+									<button onclick="nudgeRight(6,5)">S6 +5</button>
+								</div>
+								<div style="margin-top: 8px; display: flex; align-items: center; gap: 8px; flex-wrap: wrap">
+									<button onclick="applyAnglesRight()">Apply All</button>
+									<label class="label" for="r_set_joints_ms">time_ms</label>
+									<input type="number" id="r_set_joints_ms" min="0" max="10000" value="1000" style="width: 100px" />
+								</div>
+							</div>
+						</div>
+					</div>
+				</div>
+
+				<div id="logCol">
+					<div id="logRow" class="row" style="margin-top: 16px">
+						<div id="logSendWrap" class="card">
+							<div class="logHeader">
+								<span>Send Backend</span>
+								<button class="btn btn-ghost" id="btnClearSend">Clear</button>
+							</div>
+							<div id="logSend" class="logBox"></div>
+						</div>
+						<div id="logStatusWrap" class="card">
+							<div class="logHeader">
+								<span>Status</span>
+								<button class="btn btn-ghost" id="btnClearStatus">Clear</button>
+							</div>
+							<div id="logStatus" class="logBox"></div>
+						</div>
+						<div id="logFrontendWrap" class="card">
+							<div class="logHeader">
+								<span>Recv FrontEnd (joint)</span>
+								<button class="btn btn-ghost" id="btnClearFrontend">Clear</button>
+							</div>
+							<div id="logFrontend" class="logBox"></div>
+						</div>
+						<div id="logSpringBootWrap" class="card">
+							<div class="logHeader">
+								<span>Recv SpringBoot (event)</span>
+								<button class="btn btn-ghost" id="btnClearSpringBoot">Clear</button>
+							</div>
+							<div id="logSpringBoot" class="logBox"></div>
+						</div>
+						<div id="logLRWrap">
+							<div class="card">
+								<div class="logHeader">
+									<span>Left (robot_left)</span>
+									<button class="btn btn-ghost" id="btnClearLeft">Clear</button>
+								</div>
+								<div id="logLeft" class="logBox"></div>
+							</div>
+							<div class="card">
+								<div class="logHeader">
+									<span>Right (robot_right)</span>
+									<button class="btn btn-ghost" id="btnClearRight">Clear</button>
+								</div>
+								<div id="logRight" class="logBox"></div>
+							</div>
+						</div>
+					</div>
+				</div>
+			</div>
+
+			<footer class="row" style="color: var(--muted); font-size: 12px; text-align: center; padding: 16px 0 24px">
+				MQTT over WebSocket • Topics: {base}/robot/all/command, {base}/robot/{robotId}/command, {base}/robot/joint, {base}/robot/event
+			</footer>
+		</div>
+
+		<script>
+			const $ = (id) => document.getElementById(id);
+			const statusEl = $("status");
+			const logLeftEl = $("logLeft");
+			const logSendEl = $("logSend");
+			const logRightEl = $("logRight");
+			const logFrontendEl = $("logFrontend");
+			const logStatusEl = $("logStatus");
+			const logSpringBootEl = $("logSpringBoot");
+
+			let client = null;
+			let topics = { base: null, cmdAll: null, joint: null, event: null, cmdForRobot: (rid) => "" };
+			const sliderState = {
+				robot_left: { dragging: new Set(), timers: new Map() },
+				robot_right: { dragging: new Set(), timers: new Map() },
+			};
+
+			function setStatus(text) {
+				statusEl.textContent = text;
+				statusEl.classList.remove("connected", "disconnected");
+				statusEl.classList.add(text === "connected" ? "connected" : "disconnected");
+			}
+
+			function appendLog(targetEl, msg, ok, asClass) {
+				if (ok === undefined) ok = true;
+				const t = new Date().toISOString();
+				const line = `[${t}] ${msg}`;
+				const div = document.createElement("div");
+				div.textContent = line;
+				let cls = "ok";
+				if (asClass) cls = asClass;
+				else if (!ok) cls = "err";
+				div.className = cls;
+				targetEl.appendChild(div);
+				targetEl.scrollTop = targetEl.scrollHeight;
+			}
+			function logSend(msg, ok, asClass) {
+				appendLog(logSendEl, msg, ok, asClass);
+			}
+			function logStatus(msg, ok, asClass) {
+				appendLog(logStatusEl, msg, ok, asClass);
+			}
+			function logLeft(msg, ok, asClass) {
+				appendLog(logLeftEl, msg, ok, asClass);
+			}
+			function logRight(msg, ok, asClass) {
+				appendLog(logRightEl, msg, ok, asClass);
+			}
+			function logFrontend(msg, ok, asClass) {
+				appendLog(logFrontendEl, msg, ok, asClass);
+			}
+			function logSpringBoot(msg, ok, asClass) {
+				appendLog(logSpringBootEl, msg, ok, asClass);
+			}
+
+			$("btnClearSend").onclick = () => (logSendEl.innerHTML = "");
+			$("btnClearStatus").onclick = () => (logStatusEl.innerHTML = "");
+			$("btnClearLeft").onclick = () => (logLeftEl.innerHTML = "");
+			$("btnClearRight").onclick = () => (logRightEl.innerHTML = "");
+			$("btnClearFrontend").onclick = () => (logFrontendEl.innerHTML = "");
+			$("btnClearSpringBoot").onclick = () => (logSpringBootEl.innerHTML = "");
+
+			function resolveTopics() {
+				const base = $("baseTopic").value.trim() || "buriburi";
+				topics.base = base;
+				topics.cmdAll = `${base}/robot/all/command`;
+				topics.joint = `${base}/robot/joint`;
+				topics.event = `${base}/robot/event`;
+				topics.cmdForRobot = (rid) => `${base}/robot/${rid}/command`;
+			}
+
+			function connect() {
+				if (client) return;
+				resolveTopics();
+				let url = $("brokerUrl").value.trim();
+				if (url.startsWith("ssl://") || url.startsWith("mqtts://")) {
+					const after = url.replace(/^ssl:\/\//, "wss://").replace(/^mqtts:\/\//, "wss://");
+					logSend(`info: converted broker URL to ${after} (browsers need wss://)`, true, "ok");
+					url = after;
+				}
+				const clientId = ($("clientId").value.trim() || "backend-web") + "-" + Math.random().toString(16).slice(2);
+				const username = $("brokerUser").value.trim();
+				const password = $("brokerPass").value;
+				try {
+					const opts = { clientId, keepalive: 30, reconnectPeriod: 2000 };
+					if (username) Object.assign(opts, { username });
+					if (password) Object.assign(opts, { password });
+					client = mqtt.connect(url, opts);
+				} catch (e) {
+					logSend("mqtt connect error: " + e.message, false);
+					return;
+				}
+				client.on("connect", () => {
+					setStatus("connected");
+					logStatus(`connected to ${url} as ${clientId}`);
+					client.subscribe([topics.joint, topics.event], (err) => {
+						if (err) logStatus("subscribe error: " + err.message, false);
+						else logStatus(`subscribed: ${topics.joint}, ${topics.event}`);
+					});
+				});
+				client.on("message", handleMessage);
+
+				function handleMessage(topic, payload) {
+					const { data, raw } = safeParse(payload);
+					const cls = classify(data);
+					if (isJointMessage(topic, data)) {
+						renderJointState(data);
+						logFrontend(`recv ${topic}: ${raw}`, true, "recv");
+						routeLog(data.robot_id, `recv ${topic}: ${raw}`, "recv");
+						return;
+					}
+					if (isEventMessage(topic, data)) {
+						logSpringBoot(`recv ${topic}: ${raw}`, true, cls);
+						return;
+					}
+					// 현재 프론트는 joint만 수신 대상으로 사용
+					routeLog(data && data.robot_id, `recv ${topic}: ${raw}`, cls);
+				}
+
+				function safeParse(p) {
+					const text = p.toString();
+					try {
+						const obj = JSON.parse(text);
+						return { data: obj, raw: JSON.stringify(obj) };
+					} catch (err) {
+						return { data: null, raw: text };
+					}
+				}
+				function classify(d) {
+					if (!d) return "recv";
+					if (d.type === "ack") return "ack";
+					if (d.type === "progress") return "progress";
+					if (d.type === "result") return "result";
+					return "recv";
+				}
+				function isJointMessage(topic, d) {
+					return topic === topics.joint && d && Array.isArray(d.angles);
+				}
+				function isEventMessage(topic, d) {
+					return topic === topics.event && !!d;
+				}
+				function routeLog(rid, msg, cls) {
+					if (rid === "robot_left") logLeft(msg, true, cls);
+					else if (rid === "robot_right") logRight(msg, true, cls);
+					else logSend(msg, true, cls);
+				}
+				function renderJointState(d) {
+					const rid = d.robot_id || "unknown";
+					const a = d.angles;
+					const prefix = rid === "robot_left" ? "l" : rid === "robot_right" ? "r" : null;
+					if (!prefix) return;
+					const state = sliderState[rid];
+					for (let i = 1; i <= 6; i++) {
+						const val = a[i - 1];
+						const readEl = document.getElementById(`${prefix}_a${i}`);
+						if (readEl) readEl.textContent = val === null || val === undefined ? "-" : String(val);
+						const sEl = document.getElementById(`${prefix}_s${i}`);
+						const svEl = document.getElementById(`${prefix}_sv${i}`);
+						if (sEl && svEl && !state.dragging.has(i) && val !== null && val !== undefined) {
+							sEl.value = String(val);
+							svEl.textContent = String(val);
+						}
+					}
+				}
+				client.on("error", (err) => {
+					logStatus("mqtt error: " + err.message, false);
+				});
+				client.on("reconnect", () => logStatus("reconnecting..."));
+				client.on("close", () => {
+					setStatus("disconnected");
+					logStatus("disconnected");
+				});
+			}
+
+			function disconnect() {
+				if (!client) return;
+				try {
+					client.end(true);
+				} catch (e) {
+					logStatus("disconnect error: " + e.message, false);
+				}
+				client = null;
+				setStatus("disconnected");
+				logStatus("disconnected by user");
+			}
+
+			function publish(obj) {
+				if (!client) {
+					logSend("mqtt not connected", false);
+					return;
+				}
+				try {
+					const payload = JSON.stringify(obj);
+					client.publish(topics.cmdAll, payload);
+					logSend(`send ${topics.cmdAll}: ${payload}`, true, "send");
+				} catch (e) {
+					logSend("publish error: " + e.message, false);
+				}
+			}
+
+			function publishBroadcast(obj) {
+				publish(obj);
+			}
+			function publishTo(rid, obj) {
+				if (!client) {
+					logSend("mqtt not connected", false);
+					return;
+				}
+				try {
+					const payload = JSON.stringify({ ...obj, robot_id: rid });
+					const dest = topics.cmdForRobot(rid);
+					client.publish(dest, payload);
+					logSend(`send ${dest}: ${payload}`, true, "send");
+				} catch (e) {
+					logSend("publish error: " + e.message, false);
+				}
+			}
+
+			function publishSetJoint(rid, sid, angle, time_ms = 150) {
+				publishTo(rid, { type: "command", command: "set_joint", id: sid, angle, time_ms, who: "backend" });
+			}
+
+			function sendCommand(command) {
+				publish({ type: "command", command, who: "backend" });
+				logSend("send command: " + command, true, "send");
+			}
+
+			$("btnConnect").onclick = connect;
+			$("btnDisconnect").onclick = disconnect;
+
+			$("cmdStartTrack").onclick = () => publishBroadcast({ type: "command", command: "start_face_tracking", who: "backend" });
+			$("cmdStopTrack").onclick = () => publishBroadcast({ type: "command", command: "stop_face_tracking", who: "backend" });
+			$("cmdInit").onclick = () => publishBroadcast({ type: "command", command: "init_pose", who: "backend" });
+			$("cmdHeart").onclick = () => publishBroadcast({ type: "command", command: "make_heart", who: "backend" });
+			$("cmdHug").onclick = () => publishBroadcast({ type: "command", command: "make_hug", who: "backend" });
+			$("cmdHello").onclick = () => publishBroadcast({ type: "command", command: "make_hello", who: "backend" });
+			$("cmdScissors").onclick = () => publishBroadcast({ type: "command", command: "scissors", who: "backend" });
+			$("cmdRock").onclick = () => publishBroadcast({ type: "command", command: "rock", who: "backend" });
+			$("cmdPaper").onclick = () => publishBroadcast({ type: "command", command: "paper", who: "backend" });
+			$("cmdGoodMorning").onclick = () => publishBroadcast({ type: "command", command: "good_morning", who: "backend" });
+			$("cmdGoodNight").onclick = () => publishBroadcast({ type: "command", command: "good_night", who: "backend" });
+			$("cmdHungry").onclick = () => publishBroadcast({ type: "command", command: "hungry", who: "backend" });
+			$("cmdAteAll").onclick = () => publishBroadcast({ type: "command", command: "ate_all", who: "backend" });
+			$("cmdStartFollow").onclick = () => {
+				const tRaw = document.getElementById("r_set_joint_ms")?.value;
+				const time_ms = Math.max(0, Number.parseInt(tRaw, 10) || 160);
+				publishBroadcast({ type: "command", command: "start_follow", leader: "robot_left", follower: "robot_right", time_ms, who: "backend" });
+			};
+			$("cmdEndFollow").onclick = () => publishBroadcast({ type: "command", command: "end_follow", who: "backend" });
+
+			globalThis.nudgeLeft = function (id, delta) {
+				publishTo("robot_left", { type: "command", command: "nudge_joint", id, delta, who: "backend" });
+			};
+			globalThis.nudgeRight = function (id, delta) {
+				publishTo("robot_right", { type: "command", command: "nudge_joint", id, delta, who: "backend" });
+			};
+
+			globalThis.applyAnglesLeft = function () {
+				const vals = [];
+				for (let i = 1; i <= 6; i++) {
+					const raw = document.getElementById("l_i" + i).value;
+					const v = Number.parseInt(raw, 10);
+					vals.push(Number.isNaN(v) ? 0 : Math.max(0, Math.min(180, v)));
+				}
+				const tRaw = document.getElementById("l_set_joints_ms")?.value;
+				const time_ms = Math.max(0, Number.parseInt(tRaw, 10) || 600);
+				publishTo("robot_left", { type: "command", command: "set_joints", angles: vals, time_ms, who: "backend" });
+			};
+			globalThis.applyAnglesRight = function () {
+				const vals = [];
+				for (let i = 1; i <= 6; i++) {
+					const raw = document.getElementById("r_i" + i).value;
+					const v = Number.parseInt(raw, 10);
+					vals.push(Number.isNaN(v) ? 0 : Math.max(0, Math.min(180, v)));
+				}
+				const tRaw = document.getElementById("r_set_joints_ms")?.value;
+				const time_ms = Math.max(0, Number.parseInt(tRaw, 10) || 600);
+				publishTo("robot_right", { type: "command", command: "set_joints", angles: vals, time_ms, who: "backend" });
+			};
+
+			function bindSliders(prefix, rid) {
+				for (let i = 1; i <= 6; i++) {
+					const sEl = document.getElementById(`${prefix}_s${i}`);
+					const svEl = document.getElementById(`${prefix}_sv${i}`);
+					if (!sEl || !svEl) continue;
+					sEl.addEventListener("pointerdown", () => sliderState[rid].dragging.add(i));
+					sEl.addEventListener("pointerup", () => sliderState[rid].dragging.delete(i));
+					sEl.addEventListener("pointercancel", () => sliderState[rid].dragging.delete(i));
+					sEl.addEventListener("mouseleave", () => sliderState[rid].dragging.delete(i));
+
+					sEl.addEventListener("input", () => {
+						const angle = Math.max(0, Math.min(180, Number.parseInt(sEl.value, 10) || 0));
+						svEl.textContent = String(angle);
+						const key = i;
+						const map = sliderState[rid].timers;
+						if (map.has(key)) {
+							clearTimeout(map.get(key));
+						}
+						const h = setTimeout(() => {
+							const tEl = document.getElementById(`${prefix}_set_joint_ms`);
+							const t = Math.max(0, Number.parseInt(tEl && tEl.value, 10) || 160);
+							publishSetJoint(rid, i, angle, t);
+							map.delete(key);
+						}, 80);
+						map.set(key, h);
+					});
+				}
+			}
+
+			bindSliders("l", "robot_left");
+			bindSliders("r", "robot_right");
+		</script>
+	</body>
+</html>

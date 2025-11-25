@@ -1,0 +1,44 @@
+.App {
+  text-align: center;
+  min-height: 100vh;
+  background-color: #F5F6FA;
+}
+
+.App-header {
+  padding: 2rem;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  min-height: 100vh;
+}
+
+.App-header h1 {
+  margin-bottom: 1rem;
+}
+
+.App-header p {
+  margin-bottom: 2rem;
+}
+
+.button-container {
+  display: flex;
+  gap: 1rem;
+  flex-wrap: wrap;
+  justify-content: center;
+}
+
+@media (prefers-color-scheme: dark) {
+  .App {
+    background-color: #1a1a1a;
+  }
+}
+
+/* data-theme overrides to force user-selected theme */
+:root[data-theme="dark"] .App {
+  background-color: #1a1a1a;
+}
+
+:root[data-theme="light"] .App {
+  background-color: #F5F6FA;
+}

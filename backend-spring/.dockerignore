@@ -1,0 +1,15 @@
+# Docker 빌드 시 제외할 파일 및 디렉터리
+# 로컬 Gradle 캐시
+.gradle/
+build/
+
+# IDE 설정
+.idea/
+*.iml
+.vscode/
+
+# 로그 파일
+*.log
+
+# 로컬 환경 변수 파일 (Jenkins Credential로 주입할 것)
+.env

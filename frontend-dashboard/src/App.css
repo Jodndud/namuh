@@ -1,0 +1,49 @@
+.App {
+  text-align: center;
+  min-height: 100vh;
+  background-color: #F5F6FA;
+  color: #333;
+}
+
+.App-header {
+  padding: 2rem;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  min-height: 100vh;
+}
+
+.App-header h1 {
+  color: #ccc;
+  margin-bottom: 1rem;
+  font-size: 2.5rem;
+}
+
+.App-header p {
+  color: #666;
+  margin-bottom: 2rem;
+  font-size: 1.2rem;
+}
+
+.button-container {
+  display: flex;
+  gap: 1rem;
+  flex-wrap: wrap;
+  justify-content: center;
+}
+
+@media (prefers-color-scheme: dark) {
+  .App {
+    background-color: #1a1a1a;
+    color: #fff;
+  }
+  
+  .App-header h1 {
+    color: #0049AD;
+  }
+  
+  .App-header p {
+    color: #ccc;
+  }
+}

@@ -1,0 +1,120 @@
+@import "tailwindcss";
+@source "../index.html";
+@source "./**/*.{js,ts,jsx,tsx}";
+
+:root {
+  font-family: Inter, system-ui, Avenir, Helvetica, Arial, sans-serif;
+  line-height: 1.5;
+  font-weight: 400;
+
+  color-scheme: light dark;
+  background-color: #F5F6FA;
+
+  font-synthesis: none;
+  text-rendering: optimizeLegibility;
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+  -webkit-text-size-adjust: 100%;
+}
+
+* {
+  box-sizing: border-box;
+}
+
+body {
+  margin: 0;
+  display: flex;
+  place-items: center;
+  min-width: 320px;
+  min-height: 100vh;
+}
+
+#root {
+  width: 100%;
+  margin: 0 auto;
+  text-align: center;
+}
+
+@media (prefers-color-scheme: dark) {
+  :root {
+    background-color: #1a1a1a;
+  }
+}
+
+/* Theme override via data-theme attribute */
+:root[data-theme="light"] {
+  color-scheme: light;
+  background-color: #F5F6FA;
+}
+
+:root[data-theme="dark"] {
+  color-scheme: dark;
+  background-color: #1a1a1a;
+}
+
+/* Dark theme form controls for readability */
+:root[data-theme="dark"] input,
+:root[data-theme="dark"] select,
+:root[data-theme="dark"] textarea {
+  background-color: #1a1a1a; /* slate-800 */
+  color: #F5F6FA;            /* gray-50 */
+  border-color: #374151;     /* gray-700 */
+}
+
+:root[data-theme="dark"] input::placeholder,
+:root[data-theme="dark"] textarea::placeholder {
+  color: #9ca3af; /* gray-400 */
+}
+
+:root[data-theme="light"] .theme-card {
+  background-color: #f5f6fa;
+  border-color: #1a1a1a;
+  color: #1a1a1a;
+}
+
+/* Dark mode card override for MyPage Google link box */
+:root[data-theme="dark"] .theme-card {
+  background-color: #1a1a1a;
+  border-color: #f5f6fa;
+  color: #F5F6FA;
+}
+
+:root[data-theme="dark"] .theme-button {
+  background-color: #1a1a1a;
+  border-color: #f5f6fa;
+  color: #F5F6FA;
+}
+
+:root[data-theme="dark"] .theme-button:hover {
+  background-color: #f5f6fa;
+  color: #1a1a1a;
+  border-color: #1a1a1a;
+}
+
+:root[data-theme="light"] .dragbar {
+  background-color: #1a1a1a;
+}
+
+:root[data-theme="dark"] .dragbar {
+  background-color: #f5f6fa;
+}
+
+:root[data-theme="light"] .back-button {
+  color: #1a1a1a;
+}
+
+:root[data-theme="dark"] .back-button {
+  color: #f5f6fa;
+}
+
+/* Global scrollbar hide (keeps scrolling functionality) */
+/* Chrome, Safari, Opera */
+/* Hide Scrollbar */
+*::-webkit-scrollbar {
+  display: none;
+}
+/* Firefox */
+* {
+  scrollbar-width: none;
+  -ms-overflow-style: none; /* IE and old Edge */
+}

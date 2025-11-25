@@ -1,0 +1,57 @@
+{
+  "name": "frontend-dashboard",
+  "version": "1.0.0",
+  "description": "React PWA Dashboard Application",
+  "main": "index.js",
+  "scripts": {
+    "dev": "vite",
+    "start": "serve -s dist -l 3001",
+    "build": "tsc && vite build",
+    "lint": "eslint . --ext ts,tsx --report-unused-disable-directives --max-warnings 0",
+    "preview": "vite preview",
+    "test": "echo \"Error: no test specified\" && exit 1"
+  },
+  "keywords": [
+    "react",
+    "pwa",
+    "dashboard",
+    "vite"
+  ],
+  "author": "",
+  "license": "ISC",
+  "type": "module",
+  "dependencies": {
+    "@react-three/drei": "^9.122.0",
+    "@react-three/fiber": "^8.18.0",
+    "@react-three/postprocessing": "^2.19.1",
+    "@stomp/stompjs": "^7.2.1",
+    "mqtt": "^5.14.1",
+    "openvidu-browser": "^2.31.0",
+    "react": "^18.3.1",
+    "react-dom": "^18.3.1",
+    "serve": "^14.2.5",
+    "sockjs-client": "^1.6.1",
+    "three": "^0.164.1"
+  },
+  "devDependencies": {
+    "@tailwindcss/postcss": "^4.1.16",
+    "@types/react": "^18.3.12",
+    "@types/react-dom": "^18.3.1",
+    "@types/sockjs-client": "^1.5.4",
+    "@types/tailwindcss": "^3.0.11",
+    "@types/three": "^0.180.0",
+    "@typescript-eslint/eslint-plugin": "^6.14.0",
+    "@typescript-eslint/parser": "^6.14.0",
+    "@vitejs/plugin-react": "^4.3.3",
+    "autoprefixer": "^10.4.21",
+    "eslint": "^8.55.0",
+    "eslint-plugin-react-hooks": "^4.6.0",
+    "eslint-plugin-react-refresh": "^0.4.5",
+    "postcss": "^8.5.6",
+    "tailwindcss": "^4.1.16",
+    "typescript": "^5.6.3",
+    "vite": "^6.0.1",
+    "vite-plugin-pwa": "^0.21.1",
+    "workbox-window": "^7.2.0"
+  }
+}

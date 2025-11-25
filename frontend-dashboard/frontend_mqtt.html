@@ -1,0 +1,705 @@
+<!DOCTYPE html>
+<html lang="ko">
+	<head>
+		<meta charset="UTF-8" />
+		<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+		<title>robot MQTT Frontend</title>
+		<script src="https://unpkg.com/mqtt/dist/mqtt.min.js"></script>
+		<style>
+			:root {
+				--bg: #f5f7fb;
+				--card: #ffffff;
+				--border: #e5e7eb;
+				--text: #111827;
+				--muted: #6b7280;
+				--primary: #2563eb;
+				--primary-600: #1d4ed8;
+				--danger: #dc2626;
+				--success: #059669;
+			}
+			body {
+				font-family: system-ui, -apple-system, Segoe UI, Roboto, Helvetica, Arial, sans-serif;
+				margin: 0;
+				background: var(--bg);
+				color: var(--text);
+			}
+			/* 기본 박스 모델을 경계 기준으로 계산하여 오버플로우 방지 */
+			*, *::before, *::after { box-sizing: border-box; }
+			/* 컨테이너: 화면 크기에 맞춰 유동, 상한만 두고 가로 스크롤 방지 */
+			.container { max-width: clamp(1200px, 98vw, 1800px); width: 100%; margin: 0 auto; padding: 16px; }
+			.header {
+				display: flex; align-items: center; justify-content: space-between;
+				padding: 16px 0 8px;
+			}
+			h1 { font-size: 22px; margin: 0; }
+			.status-pill { display: inline-flex; align-items: center; gap: 8px; padding: 6px 10px; border-radius: 999px; font-size: 12px; border: 1px solid var(--border); background: #fff; color: var(--muted); }
+			.status-pill.connected { border-color: #a7f3d0; background: #ecfdf5; color: var(--success); }
+			.status-pill.disconnected { border-color: #fecaca; background: #fef2f2; color: var(--danger); }
+			.row {
+				margin: 10px 0;
+			}
+			button { margin-right: 8px; }
+			.btn { display: inline-flex; align-items: center; gap: 6px; padding: 8px 12px; border-radius: 8px; border: 1px solid var(--border); background: #fff; color: var(--text); cursor: pointer; }
+			.btn:hover { background: #f9fafb; }
+			.btn-primary { background: var(--primary); border-color: var(--primary); color: #fff; }
+			.btn-primary:hover { background: var(--primary-600); border-color: var(--primary-600); }
+			.btn-danger { background: var(--danger); border-color: var(--danger); color: #fff; }
+			.btn-ghost { background: transparent; border-color: transparent; color: var(--muted); }
+			.btn-ghost:hover { background: #f3f4f6; border-color: #f3f4f6; color: var(--text); }
+			input[type="text"],
+			input[type="number"] {
+				padding: 8px 10px; border-radius: 8px; border: 1px solid var(--border); background: #fff;
+			}
+			#status { font-weight: 600; }
+			.card { background: var(--card); border: 1px solid var(--border); border-radius: 12px; box-shadow: 0 2px 10px rgba(0,0,0,0.04); padding: 16px; }
+			.card-title { font-weight: 600; margin: 0 0 8px; color: var(--text); }
+			/* Main split: controls (left) | logs (right) */
+			#mainSplit { display: grid; grid-template-columns: 1.85fr 1fr; gap: 12px; align-items: start; }
+			/* Robot panels row inside control column */
+			.robot-panels { display: grid; grid-template-columns: repeat(2, minmax(260px, 1fr)); gap: 20px; align-items: start; }
+			.robot-card { min-width: 0; }
+			/* Logs: top send, bottom left/right */
+			#logSendWrap {
+				margin-bottom: 12px;
+			}
+			/* 로그 레이아웃: 한 줄에 가로로 길게, 공간이 부족하면 가로 스크롤 */
+			#logRow {
+				display: grid;
+				grid-auto-flow: column;
+				grid-auto-columns: minmax(420px, 1fr);
+				gap: 12px;
+				align-items: start;
+				overflow-x: auto;
+				padding-bottom: 2px;
+			}
+			#logLRWrap { display: contents; }
+			.logHeader {
+				display: flex; align-items: center; justify-content: space-between;
+				font-weight: 600; margin-bottom: 6px; color: #444;
+			}
+			.logBox {
+				width: 100%;
+				height: clamp(260px, 32vh, 460px);
+				border: 1px solid #ccc;
+				padding: 8px;
+				overflow: auto;
+				white-space: pre-wrap; word-break: break-word;
+				font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", "Courier New", monospace; font-size: 12px;
+				background: #fafafa;
+			}
+			/* 상단 Send 로그는 조금 더 크게 */
+			#logSend.logBox { height: clamp(300px, 36vh, 520px); }
+			.pill {
+				display: inline-block;
+				padding: 2px 8px;
+				border-radius: 999px;
+				font-size: 12px;
+				margin-left: 6px;
+			}
+			.ok {
+				background: #e6ffed;
+				color: #096d1c;
+				border: 1px solid #b7eb8f;
+			}
+			.err {
+				background: #fff2f0;
+				color: #a8071a;
+				border: 1px solid #ffa39e;
+			}
+			.send {
+				background: #fff2f0;
+				color: #a8071a;
+				border: 1px solid #ffa39e;
+			}
+			/* Incoming types */
+			.ack {
+				background: #e6f7ff;
+				color: #0050b3;
+				border: 1px solid #91d5ff;
+			}
+			.progress {
+				background: #fff7e6;
+				color: #874d00;
+				border: 1px solid #ffd591;
+			}
+			.result {
+				background: #f9f0ff;
+				color: #531dab;
+				border: 1px solid #d3adf7;
+			}
+			.config {
+				display: grid;
+				grid-template-columns: 140px 1fr;
+				gap: 8px;
+				align-items: center;
+				max-width: 720px;
+			}
+			.label {
+				color: #555;
+			}
+			/* Sliders */
+			input[type="range"] {
+				width: 100%;
+			}
+			.slider-grid {
+				display: grid;
+				grid-template-columns: repeat(auto-fit, minmax(260px, 1fr));
+				gap: 8px 16px;
+			}
+			.slider {
+				display: grid;
+				grid-template-columns: 36px 1fr 48px;
+				align-items: center;
+				gap: 8px;
+			}
+
+			/* 반응형: 화면이 좁아지면 로그를 아래로 내리고, 여백/크기를 조정 */
+			@media (max-width: 1280px) {
+				#mainSplit { grid-template-columns: 1fr; }
+				/* 컨트롤-로그 세로 스택 시 여백 약간 증가 */
+				#logSendWrap { margin-top: 12px; }
+			}
+			@media (max-width: 720px) {
+				.container { padding: 16px; }
+				.slider-grid { grid-template-columns: 1fr; }
+			}
+		</style>
+	</head>
+	<body>
+		<div class="container">
+			<div class="header">
+				<h1>robot MQTT Frontend</h1>
+				<span id="status" class="status-pill disconnected">disconnected</span>
+			</div>
+
+		<div id="mainSplit">
+			<div id="controlCol">
+				<div class="row config card">
+			<div class="label">Broker WS URL</div>
+			<input type="text" id="brokerUrl" value="ws://ios.kr:9001" />
+			<div class="label">Base Topic</div>
+			<input type="text" id="baseTopic" value="buriburi" />
+			<div class="label">Client ID</div>
+			<input type="text" id="clientId" value="frontend-web" />
+				</div>
+
+				<div class="row">
+			<button id="btnConnect" class="btn btn-primary">Connect</button>
+			<button id="btnDisconnect" class="btn">Disconnect</button>
+			<span class="pill" id="role">frontend</span>
+				</div>
+
+		<!-- 공통 Command 패널: 버튼만 있고, 모든 로봇에게 브로드캐스트로 전송 -->
+				<div class="row card" style="margin-top: 12px">
+			<div style="display: flex; gap: 12px; align-items: center; flex-wrap: wrap">
+				<strong class="card-title">Commands (broadcast to both)</strong>
+				<button id="cmdStartTrack" class="btn">Start Tracking</button>
+				<button id="cmdStopTrack" class="btn">Stop Tracking</button>
+				<button id="cmdInit" class="btn">Init Pose</button>
+				<button id="cmdHeart" class="btn">Make Heart</button>
+				<button id="cmdHug" class="btn">Make Hug</button>
+				<span style="width: 1px; height: 20px; background: #ddd"></span>
+				<button id="cmdStartFollow" class="btn">Start Follow</button>
+				<button id="cmdEndFollow" class="btn">End Follow</button>
+			</div>
+				</div>
+
+		<!-- 좌/우 패널: 실시간 각도 + 개별 수동 제어만 제공 -->
+				<div class="row robot-panels" style="margin-top: 12px">
+					<div id="panelLeft" class="card robot-card">
+				<h3>Left Robot <span class="pill">robot_left</span></h3>
+				<h4>Live Joint Angles</h4>
+				<div class="row">
+					<span>S1: <strong id="l_a1">-</strong></span>
+					<span style="margin-left: 10px">S2: <strong id="l_a2">-</strong></span>
+					<span style="margin-left: 10px">S3: <strong id="l_a3">-</strong></span>
+					<span style="margin-left: 10px">S4: <strong id="l_a4">-</strong></span>
+					<span style="margin-left: 10px">S5: <strong id="l_a5">-</strong></span>
+					<span style="margin-left: 10px">S6: <strong id="l_a6">-</strong></span>
+				</div>
+				<h4 style="margin-top: 12px">Sliders (live)</h4>
+				<div class="slider-grid">
+					<div class="slider">
+						<div>S1</div>
+						<input type="range" id="l_s1" min="0" max="180" step="1" />
+						<div><span id="l_sv1">-</span>°</div>
+					</div>
+					<div class="slider">
+						<div>S2</div>
+						<input type="range" id="l_s2" min="0" max="180" step="1" />
+						<div><span id="l_sv2">-</span>°</div>
+					</div>
+					<div class="slider">
+						<div>S3</div>
+						<input type="range" id="l_s3" min="0" max="180" step="1" />
+						<div><span id="l_sv3">-</span>°</div>
+					</div>
+					<div class="slider">
+						<div>S4</div>
+						<input type="range" id="l_s4" min="0" max="180" step="1" />
+						<div><span id="l_sv4">-</span>°</div>
+					</div>
+					<div class="slider">
+						<div>S5</div>
+						<input type="range" id="l_s5" min="0" max="180" step="1" />
+						<div><span id="l_sv5">-</span>°</div>
+					</div>
+					<div class="slider">
+						<div>S6</div>
+						<input type="range" id="l_s6" min="0" max="180" step="1" />
+						<div><span id="l_sv6">-</span>°</div>
+					</div>
+				</div>
+				<!-- set_joint time_ms 설정 -->
+				<div class="row" style="margin-top: 8px">
+					<label class="label" for="l_set_joint_ms">set_joint time_ms</label>
+					<input type="number" id="l_set_joint_ms" min="0" max="5000" value="160" style="width: 100px; margin-left: 8px" />
+				</div>
+				<h4>Manual Control</h4>
+				<div class="row">
+					<div>
+						<button onclick="nudgeLeft(1,-5)">S1 -5</button>
+						<input type="number" id="l_i1" min="0" max="180" value="90" />
+						<button onclick="nudgeLeft(1,5)">S1 +5</button>
+					</div>
+					<div>
+						<button onclick="nudgeLeft(2,-5)">S2 -5</button>
+						<input type="number" id="l_i2" min="0" max="180" value="150" />
+						<button onclick="nudgeLeft(2,5)">S2 +5</button>
+					</div>
+					<div>
+						<button onclick="nudgeLeft(3,-5)">S3 -5</button>
+						<input type="number" id="l_i3" min="0" max="180" value="20" />
+						<button onclick="nudgeLeft(3,5)">S3 +5</button>
+					</div>
+					<div>
+						<button onclick="nudgeLeft(4,-5)">S4 -5</button>
+						<input type="number" id="l_i4" min="0" max="180" value="20" />
+						<button onclick="nudgeLeft(4,5)">S4 +5</button>
+					</div>
+					<div>
+						<button onclick="nudgeLeft(5,-5)">S5 -5</button>
+						<input type="number" id="l_i5" min="0" max="180" value="90" />
+						<button onclick="nudgeLeft(5,5)">S5 +5</button>
+					</div>
+					<div>
+						<button onclick="nudgeLeft(6,-5)">S6 -5</button>
+						<input type="number" id="l_i6" min="0" max="180" value="30" />
+						<button onclick="nudgeLeft(6,5)">S6 +5</button>
+					</div>
+					<div style="margin-top: 8px; display: flex; align-items: center; gap: 8px; flex-wrap: wrap">
+						<button onclick="applyAnglesLeft()">Apply All</button>
+						<label class="label" for="l_set_joints_ms">time_ms</label>
+						<input type="number" id="l_set_joints_ms" min="0" max="10000" value="600" style="width: 100px" />
+					</div>
+					</div>
+					</div>
+
+					<div id="panelRight" class="card robot-card">
+				<h3>Right Robot <span class="pill">robot_right</span></h3>
+				<h4>Live Joint Angles</h4>
+				<div class="row">
+					<span>S1: <strong id="r_a1">-</strong></span>
+					<span style="margin-left: 10px">S2: <strong id="r_a2">-</strong></span>
+					<span style="margin-left: 10px">S3: <strong id="r_a3">-</strong></span>
+					<span style="margin-left: 10px">S4: <strong id="r_a4">-</strong></span>
+					<span style="margin-left: 10px">S5: <strong id="r_a5">-</strong></span>
+					<span style="margin-left: 10px">S6: <strong id="r_a6">-</strong></span>
+				</div>
+				<h4 style="margin-top: 12px">Sliders (live)</h4>
+				<div class="slider-grid">
+					<div class="slider">
+						<div>S1</div>
+						<input type="range" id="r_s1" min="0" max="180" step="1" />
+						<div><span id="r_sv1">-</span>°</div>
+					</div>
+					<div class="slider">
+						<div>S2</div>
+						<input type="range" id="r_s2" min="0" max="180" step="1" />
+						<div><span id="r_sv2">-</span>°</div>
+					</div>
+					<div class="slider">
+						<div>S3</div>
+						<input type="range" id="r_s3" min="0" max="180" step="1" />
+						<div><span id="r_sv3">-</span>°</div>
+					</div>
+					<div class="slider">
+						<div>S4</div>
+						<input type="range" id="r_s4" min="0" max="180" step="1" />
+						<div><span id="r_sv4">-</span>°</div>
+					</div>
+					<div class="slider">
+						<div>S5</div>
+						<input type="range" id="r_s5" min="0" max="180" step="1" />
+						<div><span id="r_sv5">-</span>°</div>
+					</div>
+					<div class="slider">
+						<div>S6</div>
+						<input type="range" id="r_s6" min="0" max="180" step="1" />
+						<div><span id="r_sv6">-</span>°</div>
+					</div>
+				</div>
+				<!-- set_joint time_ms 설정 -->
+				<div class="row" style="margin-top: 8px">
+					<label class="label" for="r_set_joint_ms">set_joint time_ms</label>
+					<input type="number" id="r_set_joint_ms" min="0" max="5000" value="160" style="width: 100px; margin-left: 8px" />
+				</div>
+				<h4>Manual Control</h4>
+				<div class="row">
+					<div>
+						<button onclick="nudgeRight(1,-5)">S1 -5</button>
+						<input type="number" id="r_i1" min="0" max="180" value="90" />
+						<button onclick="nudgeRight(1,5)">S1 +5</button>
+					</div>
+					<div>
+						<button onclick="nudgeRight(2,-5)">S2 -5</button>
+						<input type="number" id="r_i2" min="0" max="180" value="150" />
+						<button onclick="nudgeRight(2,5)">S2 +5</button>
+					</div>
+					<div>
+						<button onclick="nudgeRight(3,-5)">S3 -5</button>
+						<input type="number" id="r_i3" min="0" max="180" value="20" />
+						<button onclick="nudgeRight(3,5)">S3 +5</button>
+					</div>
+					<div>
+						<button onclick="nudgeRight(4,-5)">S4 -5</button>
+						<input type="number" id="r_i4" min="0" max="180" value="20" />
+						<button onclick="nudgeRight(4,5)">S4 +5</button>
+					</div>
+					<div>
+						<button onclick="nudgeRight(5,-5)">S5 -5</button>
+						<input type="number" id="r_i5" min="0" max="180" value="90" />
+						<button onclick="nudgeRight(5,5)">S5 +5</button>
+					</div>
+					<div>
+						<button onclick="nudgeRight(6,-5)">S6 -5</button>
+						<input type="number" id="r_i6" min="0" max="180" value="30" />
+						<button onclick="nudgeRight(6,5)">S6 +5</button>
+					</div>
+					<div style="margin-top: 8px; display: flex; align-items: center; gap: 8px; flex-wrap: wrap">
+						<button onclick="applyAnglesRight()">Apply All</button>
+						<label class="label" for="r_set_joints_ms">time_ms</label>
+						<input type="number" id="r_set_joints_ms" min="0" max="10000" value="600" style="width: 100px" />
+					</div>
+				</div>
+				</div>
+					</div>
+			</div><!-- /controlCol -->
+			<div id="logCol">
+
+		<div id="logRow" class="row" style="margin-top: 16px">
+			<div id="logSendWrap" class="card">
+				<div class="logHeader">
+					<span>Send (frontend)</span>
+					<button class="btn btn-ghost" id="btnClearSend">Clear</button>
+				</div>
+				<div id="logSend" class="logBox"></div>
+			</div>
+			<div id="logLRWrap">
+				<div class="card">
+					<div class="logHeader">
+						<span>Left (robot_left)</span>
+						<button class="btn btn-ghost" id="btnClearLeft">Clear</button>
+					</div>
+					<div id="logLeft" class="logBox"></div>
+				</div>
+				<div class="card">
+					<div class="logHeader">
+						<span>Right (robot_right)</span>
+						<button class="btn btn-ghost" id="btnClearRight">Clear</button>
+					</div>
+					<div id="logRight" class="logBox"></div>
+				</div>
+			</div>
+			</div><!-- /logCol -->
+		</div><!-- /mainSplit -->
+
+		<footer class="row" style="color: var(--muted); font-size: 12px; text-align: center; padding: 16px 0 24px;">
+			MQTT over WebSocket required for browsers • Base topic is configurable • Logs auto-scroll
+		</footer>
+		</div>
+
+		<script>
+			const $ = (id) => document.getElementById(id);
+			const statusEl = $("status");
+			const logLeftEl = $("logLeft");
+			const logSendEl = $("logSend");
+			const logRightEl = $("logRight");
+			// 듀얼 패널로 표기
+
+			let client = null;
+			let topics = {
+				tx: null,
+				rx: null,
+			};
+			const latestAngles = new Map(); // robot_id -> angles array
+			const sliderState = {
+				robot_left: { dragging: new Set(), timers: new Map() },
+				robot_right: { dragging: new Set(), timers: new Map() },
+			};
+
+			function setStatus(text) {
+				statusEl.textContent = text;
+				statusEl.classList.remove("connected", "disconnected");
+				statusEl.classList.add(text === "connected" ? "connected" : "disconnected");
+			}
+
+			function appendLog(targetEl, msg, ok, asClass) {
+				if (ok === undefined) ok = true;
+				const t = new Date().toISOString();
+				const line = `[${t}] ${msg}`;
+				const div = document.createElement("div");
+				div.textContent = line;
+				let cls = "ok";
+				if (asClass) {
+					cls = asClass;
+				} else if (!ok) {
+					cls = "err";
+				}
+				div.className = cls;
+				targetEl.appendChild(div);
+				targetEl.scrollTop = targetEl.scrollHeight;
+			}
+			function logSend(msg, ok, asClass) { appendLog(logSendEl, msg, ok, asClass); }
+			function logLeft(msg, ok, asClass) { appendLog(logLeftEl, msg, ok, asClass); }
+			function logRight(msg, ok, asClass) { appendLog(logRightEl, msg, ok, asClass); }
+
+			// Clear buttons
+			$("btnClearSend").onclick = () => (logSendEl.innerHTML = "");
+			$("btnClearLeft").onclick = () => (logLeftEl.innerHTML = "");
+			$("btnClearRight").onclick = () => (logRightEl.innerHTML = "");
+
+			function resolveTopics() {
+				const base = $("baseTopic").value.trim() || "robot";
+				// Direct to robot channels (no backend).
+				// Frontend -> Robots
+				topics.tx = `${base}/robot/rx`;
+				// Robots -> Frontend
+				topics.rx = `${base}/robot/tx`;
+			}
+
+			function connect() {
+				if (client) return;
+				resolveTopics();
+				const url = $("brokerUrl").value.trim();
+				const clientId = ($("clientId").value.trim() || "frontend-web") + "-" + Math.random().toString(16).slice(2);
+				try {
+					client = mqtt.connect(url, { clientId, keepalive: 30, reconnectPeriod: 2000 });
+				} catch (e) {
+					logSend("mqtt connect error: " + e.message, false);
+					return;
+				}
+				client.on("connect", () => {
+					setStatus("connected");
+					logSend(`connected to ${url} as ${clientId}`);
+					client.subscribe(topics.rx, (err) => {
+						if (err) logSend("subscribe error: " + err.message, false);
+						else logSend("subscribed: " + topics.rx);
+					});
+					// hello 전송
+					publish({ type: "hello", agent: "frontend" });
+				});
+				client.on("message", (topic, payload) => {
+					try {
+						const data = JSON.parse(payload.toString());
+						let cls;
+						if (data && data.type === "ack") cls = "ack";
+						else if (data && data.type === "progress") cls = "progress";
+						else if (data && data.type === "result") cls = "result";
+						const msgStr = `recv ${topic}: ${JSON.stringify(data)}`;
+						const rid = data && data.robot_id;
+						if (rid === "robot_left") logLeft(msgStr, true, cls);
+						else if (rid === "robot_right") logRight(msgStr, true, cls);
+						else logSend(msgStr, true, cls);
+						if (topic === topics.rx && data && data.type === "joint_state" && Array.isArray(data.angles)) {
+							const rid = data.robot_id || "unknown";
+							latestAngles.set(rid, data.angles);
+							const a = data.angles;
+							if (rid === "robot_left") {
+								for (let i = 1; i <= 6; i++) {
+									const val = a[i - 1];
+									const el = document.getElementById("l_a" + i);
+									if (el) el.textContent = val === null || val === undefined ? "-" : String(val);
+									// 슬라이더 실시간 업데이트 (드래그 중일 때는 스킵)
+									const sEl = document.getElementById("l_s" + i);
+									const svEl = document.getElementById("l_sv" + i);
+									if (sEl && svEl && !sliderState.robot_left.dragging.has(i)) {
+										if (val !== null && val !== undefined) {
+											sEl.value = String(val);
+											svEl.textContent = String(val);
+										}
+									}
+								}
+							} else if (rid === "robot_right") {
+								for (let i = 1; i <= 6; i++) {
+									const val = a[i - 1];
+									const el = document.getElementById("r_a" + i);
+									if (el) el.textContent = val === null || val === undefined ? "-" : String(val);
+									const sEl = document.getElementById("r_s" + i);
+									const svEl = document.getElementById("r_sv" + i);
+									if (sEl && svEl && !sliderState.robot_right.dragging.has(i)) {
+										if (val !== null && val !== undefined) {
+											sEl.value = String(val);
+											svEl.textContent = String(val);
+										}
+									}
+								}
+							}
+						}
+					} catch (e) {
+						logSend("recv non-json: " + payload, false);
+					}
+				});
+				client.on("error", (err) => {
+					logSend("mqtt error: " + err.message, false);
+				});
+				client.on("reconnect", () => logSend("reconnecting..."));
+				client.on("close", () => {
+					setStatus("disconnected");
+					logSend("disconnected");
+				});
+			}
+
+			function disconnect() {
+				if (!client) return;
+				try {
+					client.end(true);
+				} catch (e) {
+					logSend("disconnect error: " + e.message, false);
+				}
+				client = null;
+				setStatus("disconnected");
+				logSend("disconnected by user");
+			}
+
+			function publish(obj) {
+				if (!client) {
+					logSend("mqtt not connected", false);
+					return;
+				}
+				try {
+					const payload = JSON.stringify(obj);
+					client.publish(topics.tx, payload);
+					// 로그에 프론트엔드에서 보낸 메시지도 표시 (빨간색)
+					logSend(`send ${topics.tx}: ${payload}` , true, "send");
+				} catch (e) {
+					logSend("publish error: " + e.message, false);
+				}
+			}
+
+			function publishFor(rid, obj) {
+				publish({ ...obj, robot_id: rid });
+			}
+
+			function publishSetJoint(rid, sid, angle, time_ms = 150) {
+				publishFor(rid, { type: "command", command: "set_joint", id: sid, angle, time_ms, who: "frontend" });
+			}
+
+			function sendCommand(command) {
+				publish({ type: "command", command, who: "frontend" });
+				logSend("send command: " + command, true, "send");
+			}
+
+			$("btnConnect").onclick = connect;
+			$("btnDisconnect").onclick = disconnect;
+			// 공통 Command 버튼: 항상 두 로봇 모두에게 브로드캐스트(robot_id: "all")
+			$("cmdStartTrack").onclick = () => publishFor("all", { type: "command", command: "start_face_tracking", who: "frontend" });
+			$("cmdStopTrack").onclick = () => publishFor("all", { type: "command", command: "stop_face_tracking", who: "frontend" });
+			$("cmdInit").onclick = () => publishFor("all", { type: "command", command: "init_pose", who: "frontend" });
+			$("cmdHeart").onclick = () => publishFor("all", { type: "command", command: "make_heart", who: "frontend" });
+			$("cmdHug").onclick = () => publishFor("all", { type: "command", command: "make_hug", who: "frontend" });
+			$("cmdStartFollow").onclick = () => {
+				// 명시적으로 리더/팔로워를 전달하여 환경 설정 불일치에도 안정 동작
+				const tRaw = document.getElementById("r_set_joint_ms")?.value;
+				const time_ms = Math.max(0, Number.parseInt(tRaw, 10) || 160);
+				publish({
+					type: "command",
+					command: "start_follow",
+					leader: "robot_left",
+					follower: "robot_right",
+					time_ms,
+					who: "frontend",
+				});
+			};
+			$("cmdEndFollow").onclick = () => publish({ type: "command", command: "end_follow", who: "frontend" });
+
+			// 수동 제어 헬퍼
+			globalThis.nudgeLeft = function (id, delta) {
+				publishFor("robot_left", { type: "command", command: "nudge_joint", id, delta, who: "frontend" });
+			};
+			globalThis.nudgeRight = function (id, delta) {
+				publishFor("robot_right", { type: "command", command: "nudge_joint", id, delta, who: "frontend" });
+			};
+
+			globalThis.applyAnglesLeft = function () {
+				const vals = [];
+				for (let i = 1; i <= 6; i++) {
+					const raw = document.getElementById("l_i" + i).value;
+					const v = Number.parseInt(raw, 10);
+					vals.push(Number.isNaN(v) ? 0 : Math.max(0, Math.min(180, v)));
+				}
+				const tRaw = document.getElementById("l_set_joints_ms")?.value;
+				const time_ms = Math.max(0, Number.parseInt(tRaw, 10) || 600);
+				publishFor("robot_left", { type: "command", command: "set_joints", angles: vals, time_ms, who: "frontend" });
+			};
+			globalThis.applyAnglesRight = function () {
+				const vals = [];
+				for (let i = 1; i <= 6; i++) {
+					const raw = document.getElementById("r_i" + i).value;
+					const v = Number.parseInt(raw, 10);
+					vals.push(Number.isNaN(v) ? 0 : Math.max(0, Math.min(180, v)));
+				}
+				const tRaw = document.getElementById("r_set_joints_ms")?.value;
+				const time_ms = Math.max(0, Number.parseInt(tRaw, 10) || 600);
+				publishFor("robot_right", { type: "command", command: "set_joints", angles: vals, time_ms, who: "frontend" });
+			};
+
+			function sendCommandLeft(command) {
+				publishFor("robot_left", { type: "command", command, who: "frontend" });
+				logSend("send command (left): " + command, true, "send");
+			}
+			function sendCommandRight(command) {
+				publishFor("robot_right", { type: "command", command, who: "frontend" });
+				logSend("send command (right): " + command, true, "send");
+			}
+
+			// 슬라이더 이벤트 바인딩
+			function bindSliders(prefix, rid) {
+				for (let i = 1; i <= 6; i++) {
+					const sEl = document.getElementById(`${prefix}_s${i}`);
+					const svEl = document.getElementById(`${prefix}_sv${i}`);
+					if (!sEl || !svEl) continue;
+					sEl.addEventListener("pointerdown", () => sliderState[rid].dragging.add(i));
+					sEl.addEventListener("pointerup", () => sliderState[rid].dragging.delete(i));
+					sEl.addEventListener("pointercancel", () => sliderState[rid].dragging.delete(i));
+					sEl.addEventListener("mouseleave", () => sliderState[rid].dragging.delete(i));
+
+					sEl.addEventListener("input", () => {
+						const angle = Math.max(0, Math.min(180, Number.parseInt(sEl.value, 10) || 0));
+						svEl.textContent = String(angle);
+						// per-joint throttle 80ms
+						const key = i;
+						const map = sliderState[rid].timers;
+						if (map.has(key)) {
+							clearTimeout(map.get(key));
+						}
+						const h = setTimeout(() => {
+							const tEl = document.getElementById(`${prefix}_set_joint_ms`);
+							const t = Math.max(0, Number.parseInt(tEl && tEl.value, 10) || 160);
+							publishSetJoint(rid, i, angle, t);
+							map.delete(key);
+						}, 80);
+						map.set(key, h);
+					});
+				}
+			}
+
+			// 초기 바인딩
+			bindSliders("l", "robot_left");
+			bindSliders("r", "robot_right");
+
+			// 메시지 처리: 각 로봇 패널 업데이트 (기 구조 유지)
+			client && client.on && client.on("message", () => {}); // no-op to keep structure
+		</script>
+	</body>
+</html>

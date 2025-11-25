@@ -1,0 +1,10 @@
+pyproject.toml
+setup.py
+dofbot/__init__.py
+dofbot/ui_extension_example.py
+dofbot.egg-info/PKG-INFO
+dofbot.egg-info/SOURCES.txt
+dofbot.egg-info/dependency_links.txt
+dofbot.egg-info/not-zip-safe
+dofbot.egg-info/requires.txt
+dofbot.egg-info/top_level.txt

@@ -1,0 +1,17 @@
+dependency_injector
+fastapi
+openai
+pydantic
+pydantic_settings
+PyJWT
+python-dotenv
+starlette
+uvicorn
+python-multipart
+pymysql
+aiomysql
+sqlalchemy
+redis
+boto3
+paho-mqtt
+aiomqtt
